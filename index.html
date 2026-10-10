@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>广师大白云校区A区13#宿舍楼 - 电力监控系统</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#0f4c81',
+            danger: '#dc2626',
+            warn: '#f59e0b',
+            safe: '#10b981',
+            dark: '#0f172a',
+          },
+          fontFamily: {
+            mono: ['Consolas','monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .page{display:none;}
+    .page.active{display:block;}
+    .circuit-line{stroke:#94a3b8;stroke-width:2;fill:none}
+    .circuit-node{fill:#0ea5e9}
+    .circuit-load{fill:#475569}
+    .blink{animation:blink 1s infinite;}
+    @keyframes blink{
+      0%,100%{opacity:1}
+      50%{opacity:0.3}
+    }
+    .scrollbar-thin::-webkit-scrollbar{width:6px}
+    .scrollbar-thin::-webkit-scrollbar-thumb{background:#475569;border-radius:3px}
+    /* 告警弹窗 */
+    .alert-modal{
+      position:fixed;
+      top:0;left:0;right:0;bottom:0;
+      background:rgba(0,0,0,0.7);
+      display:none;
+      z-index:999;
+      align-items:center;
+      justify-content:center;
+    }
+    .alert-modal.show{display:flex;}
+    .scada-card{
+      border:1px solid #334155;
+      box-shadow: 0 0 8px rgba(14,165,233,0.15);
+    }
+  </style>
+</head>
+<body class="bg-dark text-slate-100 h-screen overflow-hidden flex">
+  <!-- 侧边导航栏 -->
+  <aside class="w-60 bg-slate-900 border-r border-slate-700 flex flex-col">
+    <div class="p-4 border-b border-slate-700">
+      <h2 class="text-lg font-bold text-white">
+        <i class="fa fa-bolt text-yellow-400 mr-2"></i>电力监控系统
+      </h2>
+      <p class="text-xs text-slate-400 mt-1">广师大白云校区A区13#宿舍楼</p>
+    </div>
+    <nav class="flex-1 py-4">
+      <ul>
+        <li class="nav-item">
+          <button data-page="home" class="w-full text-left px-4 py-3 hover:bg-slate-800 nav-btn active">
+            <i class="fa fa-dashboard mr-2"></i>总监控主页
+          </button>
+        </li>
+        <li class="nav-item">
+          <button data-page="circuit" class="w-full text-left px-4 py-3 hover:bg-slate-800 nav-btn">
+            <i class="fa fa-sitemap mr-2"></i>配电电路图
+          </button>
+        </li>
+        <li class="nav-item">
+          <button data-page="port" class="w-full text-left px-4 py-3 hover:bg-slate-800 nav-btn">
+            <i class="fa fa-usb mr-2"></i>实时端口状态
+          </button>
+        </li>
+        <li class="nav-item">
+          <button data-page="warning" class="w-full text-left px-4 py-3 hover:bg-slate-800 nav-btn">
+            <i class="fa fa-exclamation-triangle mr-2"></i>预警系统
+          </button>
+        </li>
+        <li class="nav-item">
+          <button data-page="history" class="w-full text-left px-4 py-3 hover:bg-slate-800 nav-btn">
+            <i class="fa fa-history mr-2"></i>历史记录
+          </button>
+        </li>
+      </ul>
+    </nav>
+    <div class="p-3 border-t border-slate-700 text-xs text-slate-400">
+      <div>系统时间：<span id="sysTime" class="font-mono"></span></div>
+      <div class="mt-1">运行状态：<span class="text-safe">● 正常运行</span></div>
+    </div>
+  </aside>
+
+  <!-- 主内容区域 -->
+  <main class="flex-1 overflow-auto p-4 scrollbar-thin">
+    <!-- ========== 主页：总监控 ========== -->
+    <div id="home" class="page active">
+      <div class="flex justify-between items-center mb-4">
+        <h1 class="text-2xl font-bold">总电力监控仪表盘</h1>
+        <div class="flex gap-3">
+          <div class="text-sm bg-primary px-3 py-1 rounded">A区13#宿舍楼 低压配电监测</div>
+          <button id="exportReportBtn" class="bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded text-sm">
+            <i class="fa fa-download mr-1"></i>导出报表
+          </button>
+        </div>
+      </div>
+      <div class="grid grid-cols-12 gap-4">
+        <!-- 总配电信息卡片 -->
+        <div class="col-span-12 lg:col-span-4 bg-slate-800 p-4 rounded-lg scada-card shadow">
+          <h3 class="text-lg border-b border-slate-700 pb-2 mb-3">总进线参数</h3>
+          <div class="space-y-3 font-mono text-base">
+            <div class="flex justify-between">
+              <span>总有功功率：</span>
+              <span id="totalPower" class="text-yellow-300">0.00 kW</span>
+            </div>
+            <div class="flex justify-between">
+              <span>总电流：</span>
+              <span id="totalI" class="text-blue-300">0.00 A</span>
+            </div>
+            <div class="flex justify-between">
+              <span>进线电压：</span>
+              <span id="totalU" class="text-safe">0.00 V</span>
+            </div>
+            <div class="flex justify-between">
+              <span>功率因数：</span>
+              <span id="pf">0.92</span>
+            </div>
+            <div class="flex justify-between">
+              <span>今日用电量：</span>
+              <span id="dayEnergy" class="text-yellow-300">0 kWh</span>
+            </div>
+            <div class="flex justify-between">
+              <span>开关状态：</span>
+              <span class="text-safe">合闸 ●</span>
+            </div>
+          </div>
+        </div>
+        <!-- 楼层功率图表 -->
+        <div class="col-span-12 lg:col-span-8 bg-slate-800 p-4 rounded-lg scada-card shadow">
+          <h3 class="text-lg border-b border-slate-700 pb-2 mb-3">各楼层实时输出功率</h3>
+          <canvas id="floorChart" height="240"></canvas>
+        </div>
+        <!-- 楼层配电详情 -->
+        <div class="col-span-12 bg-slate-800 p-4 rounded-lg scada-card shadow">
+          <h3 class="text-lg border-b border-slate-700 pb-2 mb-3">楼层配电单元详情</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left text-slate-300 border-b border-slate-700">
+                  <th class="py-2 px-2">楼层</th>
+                  <th class="py-2 px-2">功率(kW)</th>
+                  <th class="py-2 px-2">电流(A)</th>
+                  <th class="py-2 px-2">电压(V)</th>
+                  <th class="py-2 px-2">负载率</th>
+                  <th class="py-2 px-2">开关状态</th>
+                  <th class="py-2 px-2">状态</th>
+                </tr>
+              </thead>
+              <tbody id="floorTable">
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 配电电路图页面 ========== -->
+    <div id="circuit" class="page">
+      <h1 class="text-2xl font-bold mb-4">宿舍楼低压配电一次电路图</h1>
+      <div class="bg-slate-800 p-4 rounded-lg scada-card">
+        <svg width="100%" height="480" viewBox="0 0 900 480">
+          <!-- 进线 -->
+          <line class="circuit-line" x1="20" y1="60" x2="100" y2="60"/>
+          <circle class="circuit-node" cx="100" cy="60" r="6"/>
+          <text x="30" y="55" fill="#fff" font-size="14">10kV进线</text>
+          <rect x="110" y="40" width="80" height="40" fill="#2563eb" rx="4"/>
+          <text x="120" y="65" fill="#fff" font-size="13">变压器</text>
+          <line class="circuit-line" x1="190" y1="60" x2="240" y2="60"/>
+          <circle class="circuit-node" cx="240" cy="60" r="6"/>
+          <rect x="250" y="40" width="100" height="40" fill="#0f4c81" rx="4"/>
+          <text x="260" y="65" fill="#fff" font-size="13">总配电柜</text>
+          <!-- 分支到各楼层 -->
+          <line class="circuit-line" x1="350" y1="60" x2="350" y2="140"/>
+          <line class="circuit-line" x1="350" y1="140" x2="120" y2="140"/>
+          <rect x="40" y="120" width="70" height="35" class="circuit-load" rx="3"/>
+          <text x="45" y="142" fill="#fff" font-size="12">1F</text>
+
+          <line class="circuit-line" x1="350" y1="140" x2="220" y2="180"/>
+          <rect x="160" y="162" width="70" height="35" class="circuit-load" rx="3"/>
+          <text x="165" y="184" fill="#fff" font-size="12">2F</text>
+
+          <line class="circuit-line" x1="350" y1="140" x2="320" y2="220"/>
+          <rect x="260" y="202" width="70" height="35" class="circuit-load" rx="3"/>
+          <text x="265" y="224" fill="#fff" font-size="12">3F</text>
+
+          <line class="circuit-line" x1="350" y1="140" x2="420" y2="220"/>
+          <rect x="380" y="240" width="70" height="35" class="circuit-load" rx="3"/>
+          <text x="385" y="262" fill="#fff" font-size="12">4F</text>
+
+          <line class="circuit-line" x1="350" y1="140" x2="520" y2="180"/>
+          <rect x="480" y="162" width="70" height="35" class="circuit-load" rx="3"/>
+          <text x="485" y="184" fill="#fff" font-size="12">5F</text>
+
+          <line class="circuit-line" x1="350" y1="140" x2="620" y2="140"/>
+          <rect x="580" y="120" width="70" height="35" class="circuit-load" rx="3"/>
+          <text x="585" y="142" fill="#fff" font-size="12">6F</text>
+
+          <line class="circuit-line" x1="350" y1="140" x2="720" y2="100"/>
+          <rect x="680" y="80" width="70" height="35" class="circuit-load" rx="3"/>
+          <text x="685" y="102" fill="#fff" font-size="12">7F</text>
+
+          <line class="circuit-line" x1="350" y1="140" x2="720" y2="180"/>
+          <rect x="680" y="160" width="70" height="35" class="circuit-load" rx="3"/>
+          <text x="685" y="182" fill="#fff" font-size="12">8F</text>
+
+          <!-- 图例 -->
+          <rect x="650" y="320" width="20" height="12" fill="#0f4c81"/>
+          <text x="680" y="330" fill="#fff" font-size="13">配电柜</text>
+          <rect x="650" y="350" width="20" height="12" fill="#475569"/>
+          <text x="680" y="360" fill="#fff" font-size="13">楼层负荷</text>
+          <circle cx="660" cy="380" r="4" fill="#0ea5e9"/>
+          <text x="680" y="385" fill="#fff" font-size="13">接线节点</text>
+        </svg>
+      </div>
+      <div class="mt-4 bg-slate-800 p-4 rounded-lg scada-card">
+        <h3 class="text-lg mb-2">图纸说明</h3>
+        <ul class="text-slate-300 space-y-1 text-sm">
+          <li>1. 系统：10kV市电→配电变压器→0.4kV低压总柜→各楼层分配电箱</li>
+          <li>2. A区13#宿舍楼共8层学生宿舍，每层独立配电回路，配置漏电、过载保护</li>
+          <li>3. 监测点位：总进线、每层电压/电流/功率，支持远程遥测</li>
+          <li>4. 保护逻辑：过载、过压、欠压、漏电触发预警，严重故障可跳闸</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ========== 实时端口页面 ========== -->
+    <div id="port" class="page">
+      <h1 class="text-2xl font-bold mb-4">监控采集端口实时状态</h1>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="bg-slate-800 p-4 rounded-lg scada-card">
+          <h3 class="text-lg border-b border-slate-700 pb-2 mb-3">通讯端口列表</h3>
+          <div class="space-y-3 font-mono text-sm">
+            <div class="flex justify-between items-center">
+              <span>PORT 502 Modbus TCP</span>
+              <span class="text-safe">● 在线</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span>PORT 8080 数据上传</span>
+              <span class="text-safe">● 在线</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span>RS485-1 总柜仪表</span>
+              <span class="text-safe">● 在线</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span>RS485-2 1~4层采集</span>
+              <span class="text-safe">● 在线</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span>RS485-3 5~8层采集</span>
+              <span class="text-safe">● 在线</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span>PORT 22 远程维护</span>
+              <span class="text-warn">● 监听</span>
+            </div>
+          </div>
+        </div>
+        <div class="bg-slate-800 p-4 rounded-lg scada-card">
+          <h3 class="text-lg border-b border-slate-700 pb-2 mb-3">采集终端状态</h3>
+          <div class="space-y-3 font-mono text-sm">
+            <div class="flex justify-between">
+              <span>总进线测控终端</span><span class="text-safe">正常</span>
+            </div>
+            <div class="flex justify-between">
+              <span>1F采集模块</span><span class="text-safe">正常</span>
+            </div>
+            <div class="flex justify-between">
+              <span>2F采集模块</span><span class="text-safe">正常</span>
+            </div>
+            <div class="flex justify-between">
+              <span>3F采集模块</span><span class="text-safe">正常</span>
+            </div>
+            <div class="flex justify-between">
+              <span>4F采集模块</span><span class="text-warn">信号偏弱</span>
+            </div>
+            <div class="flex justify-between">
+              <span>5~8F采集模块</span><span class="text-safe">正常</span>
+            </div>
+          </div>
+        </div>
+        <div class="col-span-1 lg:col-span-2 bg-slate-800 p-4 rounded-lg scada-card">
+          <h3 class="text-lg border-b border-slate-700 pb-2 mb-3">实时报文窗口</h3>
+          <div id="msgConsole" class="bg-black p-2 h-40 overflow-y-auto font-mono text-xs text-green-400">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 预警系统页面 ========== -->
+    <div id="warning" class="page">
+      <h1 class="text-2xl font-bold mb-4">电力预警与保护系统</h1>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="bg-slate-800 p-4 rounded-lg scada-card">
+          <h3 class="text-lg border-b border-slate-700 pb-2 mb-3">预警阈值配置</h3>
+          <div class="space-y-3 text-sm">
+            <div class="flex justify-between">
+              <span>过压预警</span><span>≥242V</span>
+            </div>
+            <div class="flex justify-between">
+              <span>欠压预警</span><span>≤198V</span>
+            </div>
+            <div class="flex justify-between">
+              <span>过载预警</span><span>负载率>85%</span>
+            </div>
+            <div class="flex justify-between">
+              <span>严重过载跳闸</span><span>负载率>100%</span>
+            </div>
+            <div class="flex justify-between">
+              <span>漏电保护动作</span><span>≥300mA</span>
+            </div>
+            <div class="flex justify-between">
+              <span>超温预警</span><span>柜内>60℃</span>
+            </div>
+          </div>
+        </div>
+        <div class="bg-slate-800 p-4 rounded-lg scada-card">
+          <h3 class="text-lg border-b border-slate-700 pb-2 mb-3">当前告警状态</h3>
+          <div id="alarmList" class="space-y-2 text-sm">
+            <div class="text-safe">无紧急告警</div>
+          </div>
+        </div>
+        <div class="bg-slate-800 p-4 rounded-lg scada-card">
+          <h3 class="text-lg border-b border-slate-700 pb-2 mb-3">保护动作模式</h3>
+          <div class="space-y-2 text-sm">
+            <div class="flex items-center gap-2">
+              <input type="checkbox" checked id="autoTrip">
+              <label for="autoTrip">故障自动跳闸启用</label>
+            </div>
+            <div class="flex items-center gap-2">
+              <input type="checkbox" checked id="smsAlarm">
+              <label for="smsAlarm">短信推送告警</label>
+            </div>
+            <div class="flex items-center gap-2">
+              <input type="checkbox" checked id="soundAlarm">
+              <label for="soundAlarm">本地声光报警</label>
+            </div>
+            <div class="flex items-center gap-2">
+              <input type="checkbox" checked id="logSave">
+              <label for="logSave">告警事件存储</label>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-700">
+            <button id="testAlarmBtn" class="bg-danger px-3 py-2 rounded w-full">模拟紧急跳闸测试</button>
+          </div>
+        </div>
+        <div class="col-span-1 lg:col-span-3 bg-slate-800 p-4 rounded-lg scada-card">
+          <h3 class="text-lg border-b border-slate-700 pb-2 mb-3">历史告警事件</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left text-slate-300 border-b border-slate-700">
+                  <th class="py-2 px-2">时间</th>
+                  <th class="py-2 px-2">位置</th>
+                  <th class="py-2 px-2">告警类型</th>
+                  <th class="py-2 px-2">等级</th>
+                  <th class="py-2 px-2">状态</th>
+                </tr>
+              </thead>
+              <tbody id="alarmHistory">
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 历史记录页面 ========== -->
+    <div id="history" class="page">
+      <h1 class="text-2xl font-bold mb-4">电能历史数据记录</h1>
+      <div class="bg-slate-800 p-4 rounded-lg scada-card">
+        <canvas id="historyChart" height="260"></canvas>
+      </div>
+    </div>
+  </main>
+
+  <!-- 告警弹窗 -->
+  <div id="alertModal" class="alert-modal">
+    <div class="bg-slate-800 p-5 rounded-lg border-2 border-red-600 w-96">
+      <h2 class="text-xl text-red-500 font-bold mb-3"><i class="fa fa-exclamation-triangle blink mr-2"></i>系统告警</h2>
+      <div id="alertMsg" class="mb-4">4F分配电箱严重过载，准备跳闸！</div>
+      <div class="flex gap-3 justify-end">
+        <button id="closeAlertBtn" class="bg-slate-600 px-4 py-2 rounded">确认</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+// 告警音效
+let alarmAudio = new Audio("https://assets.mixkit.co/sfx/preview/mixkit-software-interface-start-2574.mp3");
+alarmAudio.volume = 0.4;
+
+// 楼层数据定义
+const floorData = [
+  {floor:"1F", power:0, I:0, U:220, rate:0, status:"合闸", state:"正常"},
+  {floor:"2F", power:0, I:0, U:220, rate:0, status:"合闸", state:"正常"},
+  {floor:"3F", power:0, I:0, U:220, rate:0, status:"合闸", state:"正常"},
+  {floor:"4F", power:0, I:0, U:220, rate:0, status:"合闸", state:"信号弱"},
+  {floor:"5F", power:0, I:0, U:220, rate:0, status:"合闸", state:"正常"},
+  {floor:"6F", power:0, I:0, U:220, rate:0, status:"合闸", state:"正常"},
+  {floor:"7F", power:0, I:0, U:220, rate:0, status:"合闸", state:"正常"},
+  {floor:"8F", power:0, I:0, U:220, rate:0, status:"合闸", state:"正常"},
+];
+
+// 导航切换
+const navBtns = document.querySelectorAll('.nav-btn');
+const pages = document.querySelectorAll('.page');
+navBtns.forEach(btn=>{
+  btn.onclick = ()=>{
+    const target = btn.dataset.page;
+    pages.forEach(p=>p.classList.remove('active'));
+    document.getElementById(target).classList.add('active');
+    navBtns.forEach(b=>b.classList.remove('bg-slate-800'));
+    btn.classList.add('bg-slate-800');
+  }
+})
+
+// 图表初始化
+let floorChart, historyChart;
+function initChart(){
+  const ctx1 = document.getElementById('floorChart').getContext('2d');
+  floorChart = new Chart(ctx1,{
+    type:'bar',
+    data:{
+      labels: floorData.map(f=>f.floor),
+      datasets:[{
+        label:'楼层功率 kW',
+        data: floorData.map(f=>f.power),
+        backgroundColor:'#3b82f6'
+      }]
+    },
+    options:{
+      responsive:true,
+      scales:{
+        y:{beginAtZero:true, grid:{color:'#334155'}},
+        x:{grid:{display:false}}
+      },
+      plugins:{legend:{labels:{color:'#fff'}}}
+    }
+  })
+  const ctx2 = document.getElementById('historyChart').getContext('2d');
+  historyChart = new Chart(ctx2,{
+    type:'line',
+    data:{
+      labels:['00:00','04:00','08:00','12:00','16:00','20:00','24:00'],
+      datasets:[{
+        label:'总功率kW',
+        data:[32,24,41,76,68,92,45],
+        borderColor:'#fbbf24',
+        tension:0.3,
+        fill:true,
+        backgroundColor:'rgba(251,191,36,0.1)'
+      }]
+    },
+    options:{
+      responsive:true,
+      scales:{
+        y:{grid:{color:'#334155'}},
+        x:{grid:{display:false}}
+      },
+      plugins:{legend:{labels:{color:'#fff'}}}
+    }
+  })
+}
+
+// 更新系统时间
+function updateTime(){
+  const now = new Date();
+  document.getElementById('sysTime').innerText = now.toLocaleString();
+}
+
+// 模拟电力数据刷新
+function refreshPowerData(){
+  let total = 0;
+  floorData.forEach(item=>{
+    // 模拟宿舍用电，波动随机
+    const p = (Math.random() * 12 + 18).toFixed(2);
+    item.power = parseFloat(p);
+    item.I = (p / 0.22 / 0.9).toFixed(2);
+    item.U = (218 + Math.random()*4).toFixed(1);
+    item.rate = Math.min(100, Math.round(p / 30 * 100));
+    total += parseFloat(p);
+  })
+  document.getElementById('totalPower').innerText = total.toFixed(2)+" kW";
+  document.getElementById('totalU').innerText = (220 + (Math.random()-0.5)*3).toFixed(1)+" V";
+  document.getElementById('totalI').innerText = (total / 0.22 / 0.9).toFixed(2)+" A";
+  document.getElementById('dayEnergy').innerText = Math.floor(1200 + total*2)+" kWh";
+
+  // 表格渲染
+  const tableDom = document.getElementById('floorTable');
+  tableDom.innerHTML = '';
+  floorData.forEach(d=>{
+    let stateClass = 'text-safe';
+    if(d.state === '信号弱') stateClass = 'text-warn';
+    const tr = document.createElement('tr');
+    tr.className="border-b border-slate-700"
+    tr.innerHTML = `
+      <td class="py-2 px-2">${d.floor}</td>
+      <td class="py-2 px-2">${d.power}</td>
+      <td class="py-2 px-2">${d.I}</td>
+      <td class="py-2 px-2">${d.U}</td>
+      <td class="py-2 px-2">${d.rate}%</td>
+      <td class="py-2 px-2">${d.status}</td>
+      <td class="py-2 px-2 ${stateClass}">${d.state}</td>
+    `
+    tableDom.appendChild(tr);
+  })
+  floorChart.data.datasets[0].data = floorData.map(f=>f.power);
+  floorChart.update();
+
+  // 通讯控制台输出报文
+  const consoleDom = document.getElementById('msgConsole');
+  const t = new Date().toLocaleTimeString();
+  consoleDom.innerHTML += `[${t}] Modbus采集成功，总功率:${total.toFixed(2)}kW\n`;
+  consoleDom.scrollTop = consoleDom.scrollHeight;
+  if(consoleDom.innerText.split('\n').length>30){
+    consoleDom.innerHTML = consoleDom.innerHTML.split('\n').slice(-20).join('\n');
+  }
+}
+
+// 告警历史
+function initAlarmHistory(){
+  const alarmList = [
+    {time:"2026-09-28 22:13",loc:"4F分配电箱",type:"负载偏高",level:"预警",status:"已恢复"},
+    {time:"2026-09-25 14:02",loc:"总进线",type:"瞬时电压波动",level:"提示",status:"已恢复"},
+    {time:"2026-09-20 08:45",loc:"7F回路",type:"漏电瞬时信号",level:"预警",status:"已恢复"},
+  ]
+  const dom = document.getElementById('alarmHistory');
+  alarmList.forEach(a=>{
+    const tr = document.createElement('tr');
+    tr.className="border-b border-slate-700";
+    tr.innerHTML = `
+      <td class="py-2 px-2">${a.time}</td>
+      <td class="py-2 px-2">${a.loc}</td>
+      <td class="py-2 px-2">${a.type}</td>
+      <td class="py-2 px-2 text-warn">${a.level}</td>
+      <td class="py-2 px-2 text-safe">${a.status}</td>
+    `
+    dom.appendChild(tr);
+  })
+}
+
+// 弹窗告警
+const alertModal = document.getElementById('alertModal');
+const alertMsg = document.getElementById('alertMsg');
+document.getElementById('closeAlertBtn').onclick = ()=>{
+  alertModal.classList.remove('show');
+}
+document.getElementById('testAlarmBtn').onclick = ()=>{
+  alertMsg.innerText = "4F分配电箱严重过载，负载率102%，保护即将动作跳闸！";
+  alertModal.classList.add('show');
+  alarmAudio.currentTime=0;
+  alarmAudio.play();
+}
+
+// 导出报表功能
+document.getElementById('exportReportBtn').onclick = ()=>{
+  let csv = "楼层,功率(kW),电流(A),电压(V),负载率,开关状态,设备状态\n";
+  floorData.forEach(d=>{
+    csv += `${d.floor},${d.power},${d.I},${d.U},${d.rate}%,${d.status},${d.state}\n`
+  })
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = "广师大A13宿舍楼电力报表.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// 页面加载
+window.onload = ()=>{
+  initChart();
+  initAlarmHistory();
+  updateTime();
+  refreshPowerData();
+  setInterval(updateTime, 1000);
+  setInterval(refreshPowerData, 2000);
+}
+</script>
+</body>
+</html>
+<!-- （注：内容由AI生成） -->
