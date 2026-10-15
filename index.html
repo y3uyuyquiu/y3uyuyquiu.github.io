@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>广技师白云校区A区13号宿舍楼电力监控系统</title>
+    <!-- 使用稳定CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;font-family:"Microsoft Yahei",sans-serif}
+        body{background:#0f1722;color:#e6edf7}
+        /* 顶部导航栏 */
+        .top-nav{height:50px;background:#162233;display:flex;align-items:center;padding:0 20px;border-bottom:1px solid #273b52}
+        .top-nav .title{font-size:18px;font-weight:bold;color:#49b8ff;margin-right:40px}
+        .top-nav a{color:#b8c8dd;text-decoration:none;padding:0 16px;height:50px;line-height:50px;display:inline-block}
+        .top-nav a.active{background:#1f3550;color:#49b8ff;border-bottom:2px solid #49b8ff}
+        .top-nav a:hover{background:#1a2b40;color:#fff}
+        .container{padding:20px;max-width:1600px;margin:0 auto}
+        .grid-wrap{display:grid;grid-template-columns: 1fr 1fr;gap:20px;margin-bottom:20px}
+        .card{background:#162233;border:1px solid #273b52;border-radius:8px;padding:16px}
+        .card h3{color:#73c0ff;margin-bottom:14px;font-size:16px;border-bottom:1px solid #273b52;padding-bottom:8px}
+        .full-card{grid-column:1 / -1;}
+        /* 总参数表格 */
+        .param-table{width:100%;border-collapse:collapse}
+        .param-table td{border:1px solid #273b52;padding:10px;color:#c2d1e6}
+        .param-table td:first-child{background:#1b2c42;width:180px;color:#8cb8e8}
+        /* 宿舍用电表格 */
+        .dorm-table{width:100%;border-collapse:collapse;text-align:center}
+        .dorm-table th{background:#1b2c42;color:#8cb8e8;padding:10px;font-weight:normal;border:1px solid #273b52}
+        .dorm-table td{border:1px solid #273b52;padding:9px;color:#c2d1e6}
+        .dorm-status-normal{color:#28a745;font-weight:bold}
+        .dorm-status-warning{color:#ffc107;font-weight:bold}
+        .dorm-status-alarm{color:#dc3545;font-weight:bold}
+        /* 楼层用电模块 */
+        .floor-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+        .floor-item{background:#1b2c42;padding:12px;border-radius:6px;border-left:4px solid #28a745}
+        .floor-item.warning{border-left-color:#ffc107}
+        .floor-item.alarm{border-left-color:#dc3545}
+        .floor-item h4{color:#fff;margin-bottom:6px}
+        .floor-item p{font-size:14px;color:#b8c8dd;line-height:1.6}
+        /* 图表容器 */
+        .chart-box{height:320px;width:100%}
+        .chart-box-sm{height:280px;width:100%;min-height:280px;}
+        canvas{width:100%;}
+        /* 底部状态栏 */
+        .status-bar{margin-top:20px;background:#162233;padding:10px;border-radius:6px;border:1px solid #273b52}
+        .status-bar .time{color:#49b8ff;float:right}
+        /* 通用筛选栏 */
+        .filter-bar{margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+        .filter-bar button{background:#1b2c42;border:1px solid #273b52;color:#b8c8dd;padding:5px 12px;border-radius:4px;cursor:pointer}
+        .filter-bar button.active{background:#1f3550;color:#49b8ff;border-color:#49b8ff}
+        .filter-bar button:hover{background:#1a2b40;color:#fff}
+        .filter-bar .label{color:#8cb8e8;margin-right:8px}
+
+        /* ========== 通用统计卡片 ========== */
+        .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+        .stat-card{background:#1b2c42;padding:14px;border-radius:6px;text-align:center;border-left:4px solid #49b8ff}
+        .stat-card .num{font-size:24px;font-weight:bold;color:#fff;margin-bottom:4px}
+        .stat-card .label{font-size:13px;color:#8cb8e8}
+        .stat-card.warning{border-left-color:#ffc107}
+        .stat-card.alarm{border-left-color:#dc3545}
+        .stat-card.offline{border-left-color:#6c757d}
+        .stat-card.success{border-left-color:#28a745}
+
+        /* ========== 端口监测样式 ========== */
+        .port-table{width:100%;border-collapse:collapse;text-align:center;font-size:14px}
+        .port-table th{background:#1b2c42;color:#8cb8e8;padding:10px;font-weight:normal;border:1px solid #273b52}
+        .port-table td{border:1px solid #273b52;padding:8px;color:#c2d1e6}
+        /* 状态指示灯 */
+        .status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
+        .dot-normal{background:#28a745;box-shadow:0 0 6px #28a745}
+        .dot-warning{background:#ffc107;box-shadow:0 0 6px #ffc107}
+        .dot-alarm{background:#dc3545;box-shadow:0 0 6px #dc3545;animation:blink 1s infinite}
+        .dot-offline{background:#6c757d}
+        @keyframes blink{
+            0%,100%{opacity:1}
+            50%{opacity:0.3}
+        }
+
+        /* ========== 预警系统样式 ========== */
+        .level-tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:bold}
+        .level-serious{background:rgba(220,53,69,0.15);color:#dc3545;border:1px solid #dc3545}
+        .level-heavy{background:rgba(255,193,7,0.15);color:#ffc107;border:1px solid #ffc107}
+        .level-general{background:rgba(73,184,255,0.15);color:#49b8ff;border:1px solid #49b8ff}
+        .handle-tag{padding:2px 8px;border-radius:4px;font-size:12px}
+        .status-untreated{color:#dc3545;font-weight:bold}
+        .status-treated{color:#28a745}
+        .btn-sm{background:#1f3550;border:1px solid #49b8ff;color:#49b8ff;padding:3px 8px;border-radius:4px;cursor:pointer;font-size:12px}
+        .btn-sm:hover{background:#49b8ff;color:#fff}
+        .btn-sm:disabled{opacity:0.5;cursor:not-allowed;border-color:#6c757d;color:#6c757d}
+        .btn-sm.danger{border-color:#dc3545;color:#dc3545}
+        .btn-sm.danger:hover{background:#dc3545;color:#fff}
+        .warn-table{width:100%;border-collapse:collapse;text-align:center;font-size:14px}
+        .warn-table th{background:#1b2c42;color:#8cb8e8;padding:10px;font-weight:normal;border:1px solid #273b52}
+        .warn-table td{border:1px solid #273b52;padding:9px;color:#c2d1e6}
+
+        /* ========== 违规电器样式 ========== */
+        .confidence-bar{display:inline-block;width:60px;height:6px;background:#273b52;border-radius:3px;vertical-align:middle;margin-right:6px;overflow:hidden}
+        .confidence-inner{height:100%;background:#49b8ff}
+        .confidence-high .confidence-inner{background:#dc3545}
+        .confidence-mid .confidence-inner{background:#ffc107}
+        .appliance-type{font-weight:bold}
+
+        /* ========== 历史报表样式 ========== */
+        .report-table{width:100%;border-collapse:collapse;text-align:center;font-size:14px}
+        .report-table th{background:#1b2c42;color:#8cb8e8;padding:10px;font-weight:normal;border:1px solid #273b52}
+        .report-table td{border:1px solid #273b52;padding:8px;color:#c2d1e6}
+        .report-table .total-row{background:#1b2c42;font-weight:bold;color:#73c0ff}
+        .btn-export{background:#1f3550;border:1px solid #28a745;color:#28a745;padding:5px 12px;border-radius:4px;cursor:pointer;margin-left:auto}
+        .btn-export:hover{background:#28a745;color:#fff}
+
+        /* 同比环比涨跌 */
+        .rate-up{color:#dc3545}
+        .rate-down{color:#28a745}
+        .rate-normal{color:#8cb8e8}
+
+        /* 排名样式 */
+        .rank-num{display:inline-block;width:22px;height:22px;line-height:22px;border-radius:4px;text-align:center;font-weight:bold;font-size:12px}
+        .rank-1{background:#ffc107;color:#0f1722}
+        .rank-2{background:#e0e0e0;color:#0f1722}
+        .rank-3{background:#cd7f32;color:#0f1722}
+        .rank-normal{background:#273b52;color:#c2d1e6}
+        .rank-tag{padding:1px 6px;border-radius:3px;font-size:11px;font-weight:bold}
+        .tag-green{background:rgba(40,167,69,0.15);color:#28a745;border:1px solid #28a745}
+        .tag-red{background:rgba(220,53,69,0.15);color:#dc3545;border:1px solid #dc3545}
+        .rank-arrow{margin-left:4px;font-size:12px}
+    </style>
+</head>
+<body>
+<div class="top-nav">
+    <div class="title">广技师白云校区A区13号宿舍楼｜电力监控系统</div>
+    <a href="#" class="active">总监控主页</a>
+    <a href="#dormDetail">各宿舍用电详情</a>
+    <a href="#portMonitor">实时端口监控</a>
+    <a href="#warnSystem">预警系统</a>
+    <a href="#illegalAppliance">违规电器识别</a>
+    <a href="#historyReport">历史报表</a>
+</div>
+
+<div class="container">
+    <!-- 第一行：时序折线图 -->
+    <div class="card full-card">
+        <h3>宿舍楼总实时功率 - 分钟级时间记录曲线</h3>
+        <div class="chart-box">
+            <canvas id="powerLineChart"></canvas>
+        </div>
+    </div>
+
+    <div class="grid-wrap">
+        <!-- 左侧：各楼层用电 -->
+        <div class="card">
+            <h3>各楼层用电监测（实时功率+累计用电量）</h3>
+            <div class="floor-grid" id="floorContainer"></div>
+        </div>
+        <!-- 右侧：耗电去向饼图 -->
+        <div class="card">
+            <h3>耗电去向占比分析（饼状图）</h3>
+            <div class="chart-box-sm">
+                <canvas id="powerPieChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- 各宿舍具体用电情况 -->
+    <div class="card full-card" id="dormDetail">
+        <h3>各宿舍具体用电情况</h3>
+        <div class="filter-bar">
+            <span class="label">楼层筛选：</span>
+            <button class="active" onclick="filterDorm(0)">全部</button>
+            <button onclick="filterDorm(1)">1楼</button>
+            <button onclick="filterDorm(2)">2楼</button>
+            <button onclick="filterDorm(3)">3楼</button>
+            <button onclick="filterDorm(4)">4楼</button>
+            <button onclick="filterDorm(5)">5楼</button>
+            <button onclick="filterDorm(6)">6楼</button>
+        </div>
+        <table class="dorm-table" id="dormTable">
+            <thead>
+                <tr>
+                    <th>宿舍号</th>
+                    <th>所属楼层</th>
+                    <th>实时功率 (kW)</th>
+                    <th>今日累计用电量 (kWh)</th>
+                    <th>本月累计用电量 (kWh)</th>
+                    <th>用电状态</th>
+                </tr>
+            </thead>
+            <tbody id="dormTbody"></tbody>
+        </table>
+    </div>
+
+    <!-- 实时端口监测系统 -->
+    <div class="card full-card" id="portMonitor">
+        <h3>实时端口监测系统</h3>
+        <div class="stat-grid">
+            <div class="stat-card">
+                <div class="num" id="portTotal">10</div>
+                <div class="label">监测端口总数</div>
+            </div>
+            <div class="stat-card success">
+                <div class="num" id="portOnline">9</div>
+                <div class="label">在线运行</div>
+            </div>
+            <div class="stat-card warning">
+                <div class="num" id="portWarning">1</div>
+                <div class="label">预警端口</div>
+            </div>
+            <div class="stat-card offline">
+                <div class="num" id="portOffline">1</div>
+                <div class="label">离线/待机</div>
+            </div>
+        </div>
+        <table class="port-table">
+            <thead>
+                <tr>
+                    <th>端口编号</th>
+                    <th>端口名称</th>
+                    <th>端口类型</th>
+                    <th>运行状态</th>
+                    <th>电压 (V)</th>
+                    <th>电流 (A)</th>
+                    <th>有功功率 (kW)</th>
+                    <th>端口温度 (℃)</th>
+                    <th>通信状态</th>
+                    <th>最后更新</th>
+                </tr>
+            </thead>
+            <tbody id="portTbody"></tbody>
+        </table>
+    </div>
+
+    <!-- 预警系统 -->
+    <div class="card full-card" id="warnSystem">
+        <h3>智能预警系统</h3>
+        <div class="stat-grid">
+            <div class="stat-card">
+                <div class="num" id="warnTotal">0</div>
+                <div class="label">累计预警总数</div>
+            </div>
+            <div class="stat-card alarm">
+                <div class="num" id="warnUntreated">0</div>
+                <div class="label">待处理预警</div>
+            </div>
+            <div class="stat-card warning">
+                <div class="num" id="warnSerious">0</div>
+                <div class="label">严重级别</div>
+            </div>
+            <div class="stat-card success">
+                <div class="num" id="warnTreated">0</div>
+                <div class="label">已处理</div>
+            </div>
+        </div>
+
+        <div class="filter-bar">
+            <span class="label">预警筛选：</span>
+            <button class="active" onclick="filterWarning('all')">全部</button>
+            <button onclick="filterWarning('untreated')">待处理</button>
+            <button onclick="filterWarning('serious')">严重</button>
+            <button onclick="filterWarning('heavy')">较重</button>
+            <button onclick="filterWarning('general')">一般</button>
+        </div>
+
+        <table class="warn-table">
+            <thead>
+                <tr>
+                    <th>预警时间</th>
+                    <th>预警级别</th>
+                    <th>预警类型</th>
+                    <th>预警位置</th>
+                    <th>详情描述</th>
+                    <th>处理状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="warnTbody"></tbody>
+        </table>
+    </div>
+
+    <!-- 违规电器智能识别监测 -->
+    <div class="card full-card" id="illegalAppliance">
+        <h3>违规电器智能识别监测</h3>
+        <div class="stat-grid">
+            <div class="stat-card warning">
+                <div class="num" id="illegalTotal">0</div>
+                <div class="label">疑似违规总数</div>
+            </div>
+            <div class="stat-card alarm">
+                <div class="num" id="illegalVerified">0</div>
+                <div class="label">已核实违规</div>
+            </div>
+            <div class="stat-card success">
+                <div class="num" id="illegalTreated">0</div>
+                <div class="label">已断电处理</div>
+            </div>
+            <div class="stat-card offline">
+                <div class="num" id="illegalFalse">0</div>
+                <div class="label">误报排除</div>
+            </div>
+        </div>
+
+        <table class="warn-table">
+            <thead>
+                <tr>
+                    <th>发现时间</th>
+                    <th>宿舍号</th>
+                    <th>疑似电器类型</th>
+                    <th>峰值功率 (kW)</th>
+                    <th>持续时长</th>
+                    <th>置信度</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="illegalTbody"></tbody>
+        </table>
+    </div>
+
+    <!-- 历史报表 -->
+    <div class="card full-card" id="historyReport">
+        <h3>历史数据报表</h3>
+        <div class="filter-bar">
+            <span class="label">时间范围：</span>
+            <button class="active" onclick="switchReport('today', currentReportType)">今日</button>
+            <button onclick="switchReport('week', currentReportType)">近7天</button>
+            <button onclick="switchReport('month', currentReportType)">近30天</button>
+            <span class="label" style="margin-left:20px">报表类型：</span>
+            <button class="active" onclick="switchReport(currentReportTime, 'power')">用电报表</button>
+            <button onclick="switchReport(currentReportTime, 'warn')">预警报表</button>
+            <button onclick="switchReport(currentReportTime, 'port')">端口报表</button>
+            <button onclick="switchReport(currentReportTime, 'rank')">能耗排名</button>
+            <button class="btn-export" onclick="exportReport()">导出报表</button>
+        </div>
+
+        <div class="stat-grid" id="reportOverview">
+            <!-- 动态渲染概览卡片 -->
+        </div>
+
+        <table class="report-table" id="reportTable">
+            <thead id="reportTableHead"></thead>
+            <tbody id="reportTbody"></tbody>
+        </table>
+    </div>
+
+    <!-- 系统总电力参数表 -->
+    <div class="card full-card">
+        <h3>系统总电力参数表</h3>
+        <table class="param-table" id="mainParamTable">
+            <tr>
+                <td>总进线电压</td><td id="totalVoltage">220.0 V</td>
+                <td>总进线电流</td><td id="totalCurrent">142.6 A</td>
+                <td>总实时有功功率</td><td id="totalPower">31.37 kW</td>
+            </tr>
+            <tr>
+                <td>总累计用电量</td><td id="totalEnergy">18624.7 kWh</td>
+                <td>功率因数</td><td id="powerFactor">0.92</td>
+                <td>当前频率</td><td id="freq">50.02 Hz</td>
+            </tr>
+            <tr>
+                <td>进线状态</td><td id="lineStatus">正常</td>
+                <td>系统通讯端口</td><td>COM01</td>
+                <td>更新时间</td><td id="updateTime">--</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="status-bar">
+        系统状态：正常运行｜数据采集周期：1分钟 <span class="time" id="sysTime"></span>
+    </div>
+</div>
+
+<script>
+    // ========== 全局变量 ==========
+    let lineChart, pieChart;
+    let timeLabels = [];
+    let powerData = [];
+    const maxDataCount = 20;
+    let currentFloorFilter = 0;
+    let currentWarnFilter = 'all';
+    let currentReportTime = 'today';
+    let currentReportType = 'power';
+
+    const floorList = [
+        {name:"1楼", power:4.2, energy:3120.5},
+        {name:"2楼", power:5.1, energy:3462.1},
+        {name:"3楼", power:6.3, energy:3810.7},
+        {name:"4楼", power:5.8, energy:3544.3},
+        {name:"5楼", power:4.7, energy:3201.9},
+        {name:"6楼", power:5.2, energy:3485.2}
+    ];
+
+    const dormList = [
+        {room:"101", floor:1, power:1.02, lastPower:0.98, dayEnergy:2.4, monthEnergy:780.2, highPowerTime:0},
+        {room:"102", floor:1, power:0.98, lastPower:0.95, dayEnergy:2.3, monthEnergy:752.6, highPowerTime:0},
+        {room:"103", floor:1, power:1.15, lastPower:1.10, dayEnergy:2.7, monthEnergy:810.4, highPowerTime:0},
+        {room:"104", floor:1, power:1.05, lastPower:1.02, dayEnergy:2.5, monthEnergy:777.3, highPowerTime:0},
+        {room:"201", floor:2, power:1.28, lastPower:1.22, dayEnergy:3.0, monthEnergy:865.1, highPowerTime:0},
+        {room:"202", floor:2, power:1.22, lastPower:1.18, dayEnergy:2.9, monthEnergy:842.7, highPowerTime:0},
+        {room:"203", floor:2, power:1.30, lastPower:1.25, dayEnergy:3.1, monthEnergy:880.5, highPowerTime:0},
+        {room:"204", floor:2, power:1.30, lastPower:1.26, dayEnergy:2.8, monthEnergy:873.8, highPowerTime:0},
+        {room:"301", floor:3, power:1.58, lastPower:1.45, dayEnergy:3.7, monthEnergy:952.6, highPowerTime:5},
+        {room:"302", floor:3, power:1.62, lastPower:1.50, dayEnergy:3.8, monthEnergy:970.3, highPowerTime:8},
+        {room:"303", floor:3, power:1.55, lastPower:1.48, dayEnergy:3.6, monthEnergy:945.1, highPowerTime:3},
+        {room:"304", floor:3, power:1.55, lastPower:1.50, dayEnergy:3.7, monthEnergy:942.7, highPowerTime:4},
+        {room:"401", floor:4, power:1.42, lastPower:1.38, dayEnergy:3.3, monthEnergy:890.2, highPowerTime:0},
+        {room:"402", floor:4, power:1.48, lastPower:1.42, dayEnergy:3.5, monthEnergy:912.4, highPowerTime:0},
+        {room:"403", floor:4, power:1.45, lastPower:1.40, dayEnergy:3.4, monthEnergy:901.8, highPowerTime:0},
+        {room:"404", floor:4, power:1.45, lastPower:1.41, dayEnergy:3.4, monthEnergy:899.9, highPowerTime:0},
+        {room:"501", floor:5, power:1.18, lastPower:1.15, dayEnergy:2.8, monthEnergy:805.3, highPowerTime:0},
+        {room:"502", floor:5, power:1.12, lastPower:1.08, dayEnergy:2.6, monthEnergy:790.6, highPowerTime:0},
+        {room:"503", floor:5, power:1.20, lastPower:1.16, dayEnergy:2.8, monthEnergy:812.1, highPowerTime:0},
+        {room:"504", floor:5, power:1.20, lastPower:1.17, dayEnergy:2.7, monthEnergy:793.9, highPowerTime:0},
+        {room:"601", floor:6, power:1.28, lastPower:1.24, dayEnergy:3.0, monthEnergy:870.5, highPowerTime:0},
+        {room:"602", floor:6, power:1.32, lastPower:1.28, dayEnergy:3.1, monthEnergy:885.2, highPowerTime:0},
+        {room:"603", floor:6, power:1.30, lastPower:1.27, dayEnergy:3.0, monthEnergy:868.7, highPowerTime:0},
+        {room:"604", floor:6, power:1.30, lastPower:1.25, dayEnergy:2.9, monthEnergy:860.8, highPowerTime:0}
+    ];
+
+    const powerTypeData = {
+        lighting: 22, socket:35, aircon:30, publicPower:10, other:3
+    };
+
+    const portList = [
+        {id:"COM01", name:"主进线端口", type:"高压进线", runStatus:"normal", voltage:220, current:142.6, power:31.37, temp:32, commStatus:"正常", update:"--"},
+        {id:"COM11", name:"1楼配电端口", type:"楼层配电", runStatus:"normal", voltage:221, current:19.1, power:4.2, temp:28, commStatus:"正常", update:"--"},
+        {id:"COM12", name:"2楼配电端口", type:"楼层配电", runStatus:"normal", voltage:220, current:23.2, power:5.1, temp:29, commStatus:"正常", update:"--"},
+        {id:"COM13", name:"3楼配电端口", type:"楼层配电", runStatus:"warning", voltage:219, current:28.6, power:6.3, temp:38, commStatus:"正常", update:"--"},
+        {id:"COM14", name:"4楼配电端口", type:"楼层配电", runStatus:"normal", voltage:220, current:26.4, power:5.8, temp:30, commStatus:"正常", update:"--"},
+        {id:"COM15", name:"5楼配电端口", type:"楼层配电", runStatus:"normal", voltage:221, current:21.4, power:4.7, temp:28, commStatus:"正常", update:"--"},
+        {id:"COM16", name:"6楼配电端口", type:"楼层配电", runStatus:"normal", voltage:220, current:23.7, power:5.2, temp:29, commStatus:"正常", update:"--"},
+        {id:"COM21", name:"公共照明端口", type:"公共设施", runStatus:"normal", voltage:220, current:9.1, power:2.0, temp:27, commStatus:"正常", update:"--"},
+        {id:"COM22", name:"动力设备端口", type:"公共设施", runStatus:"normal", voltage:380, current:3.2, power:1.2, temp:35, commStatus:"正常", update:"--"},
+        {id:"COM30", name:"备用进线端口", type:"备用冗余", runStatus:"offline", voltage:0, current:0, power:0, temp:25, commStatus:"待机", update:"--"}
+    ];
+
+    // ========== 预警数据 ==========
+    let warningList = [];
+    let warnIdCounter = 0;
+
+    // ========== 违规电器数据 ==========
+    let illegalList = [];
+    let illegalIdCounter = 0;
+    const APPLIANCE_RULES = [
+        {min:0.8, max:1.2, name:"电吹风", confidence:0.6},
+        {min:1.0, max:1.8, name:"热得快/电暖器", confidence:0.85},
+        {min:1.5, max:2.5, name:"电磁炉/电火锅", confidence:0.9},
+        {min:2.0, max:3.0, name:"电热水器/空调", confidence:0.95}
+    ];
+
+    // ========== 初始化折线图 ==========
+    function initLineChart(){
+        const ctx = document.getElementById('powerLineChart').getContext('2d');
+        lineChart = new Chart(ctx,{
+            type:'line',
+            data:{
+                labels:timeLabels,
+                datasets:[{
+                    label:"总实时功率 kW（每分钟采样）",
+                    data:powerData,
+                    borderColor:'#49b8ff',
+                    backgroundColor:'rgba(73,184,255,0.1)',
+                    fill:true,
+                    tension:0.2,
+                    pointRadius:3
+                }]
+            },
+            options:{
+                responsive:true,
+                maintainAspectRatio:false,
+                plugins:{legend:{labels:{color:'#c2d1e6'}}},
+                scales:{
+                    x:{grid:{color:'#273b52', borderDash: [4, 4]},ticks:{color:'#b8c8dd'}},
+                    y:{min: 0,grid:{color:'#273b52', borderDash: [4, 4]},ticks:{color:'#b8c8dd'},title:{display:true,text:"功率(kW)",color:'#b8c8dd'}}
+                }
+            }
+        })
+    }
+
+    // ========== 初始化饼图 ==========
+    function initPieChart(){
+        const ctx = document.getElementById('powerPieChart').getContext('2d');
+        pieChart = new Chart(ctx,{
+            type:'pie',
+            data:{
+                labels:["照明用电","插座用电","空调用电","公共供电","其他负荷"],
+                datasets:[{
+                    data:[powerTypeData.lighting,powerTypeData.socket,powerTypeData.aircon,powerTypeData.publicPower,powerTypeData.other],
+                    backgroundColor:['#49b8ff','#36cc96','#ffc107','#ff784e','#9b7bff'],
+                    borderColor:"#0f1722",
+                    borderWidth:2
+                }]
+            },
+            options:{
+                responsive:true,
+                maintainAspectRatio:false,
+                plugins:{
+                    legend:{labels:{color:'#c2d1e6',font:{size:12}}},
+                    tooltip:{callbacks:{label:function(context){return context.label + "：" + context.raw + "%";}}}
+                }
+            }
+        })
+    }
+
+    // ========== 渲染楼层卡片 ==========
+    function renderFloor(){
+        const wrap = document.getElementById('floorContainer');
+        wrap.innerHTML = "";
+        floorList.forEach(floor=>{
+            const div = document.createElement('div');
+            let statusClass = "";
+            if (floor.power >= 6.0) statusClass = "alarm";
+            else if (floor.power >= 5.5) statusClass = "warning";
+            div.className = "floor-item " + statusClass;
+            div.innerHTML = `
+                <h4>${floor.name}</h4>
+                <p>实时功率：<b>${floor.power.toFixed(2)} kW</b></p>
+                <p>累计用电量：<b>${floor.energy.toFixed(1)} kWh</b></p>
+            `
+            wrap.appendChild(div);
+        })
+    }
+
+    // ========== 渲染宿舍表格 ==========
+    function renderDormList(){
+        const tbody = document.getElementById('dormTbody');
+        tbody.innerHTML = "";
+        const showList = currentFloorFilter === 0 
+            ? dormList 
+            : dormList.filter(item => item.floor === currentFloorFilter);
+        showList.forEach(dorm=>{
+            const tr = document.createElement('tr');
+            let statusText, statusClass;
+            if(dorm.power >= 1.5){
+                statusText = "过载告警";
+                statusClass = "dorm-status-alarm";
+            }else if(dorm.power >= 1.2){
+                statusText = "负载预警";
+                statusClass = "dorm-status-warning";
+            }else{
+                statusText = "正常";
+                statusClass = "dorm-status-normal";
+            }
+            tr.innerHTML = `
+                <td><b>${dorm.room}</b></td>
+                <td>${dorm.floor}楼</td>
+                <td>${dorm.power.toFixed(3)}</td>
+                <td>${dorm.dayEnergy.toFixed(2)}</td>
+                <td>${dorm.monthEnergy.toFixed(1)}</td>
+                <td class="${statusClass}">${statusText}</td>
+            `;
+            tbody.appendChild(tr);
+        })
+    }
+
+    // ========== 渲染端口表格 ==========
+    function renderPortTable(){
+        const tbody = document.getElementById('portTbody');
+        tbody.innerHTML = "";
+        portList.forEach(port=>{
+            const tr = document.createElement('tr');
+            let dotClass, statusText;
+            switch(port.runStatus){
+                case "normal": dotClass="dot-normal"; statusText="运行中"; break;
+                case "warning": dotClass="dot-warning"; statusText="预警"; break;
+                case "alarm": dotClass="dot-alarm"; statusText="告警"; break;
+                case "offline": dotClass="dot-offline"; statusText="离线"; break;
+            }
+            tr.innerHTML = `
+                <td><b>${port.id}</b></td>
+                <td>${port.name}</td>
+                <td>${port.type}</td>
+                <td><span class="status-dot ${dotClass}"></span>${statusText}</td>
+                <td>${port.voltage.toFixed(1)}</td>
+                <td>${port.current.toFixed(1)}</td>
+                <td>${port.power.toFixed(2)}</td>
+                <td>${port.temp.toFixed(1)}</td>
+                <td>${port.commStatus}</td>
+                <td>${port.update}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+        document.getElementById('portTotal').innerText = portList.length;
+        document.getElementById('portOnline').innerText = portList.filter(p=>p.runStatus==="normal" || p.runStatus==="warning").length;
+        document.getElementById('portWarning').innerText = portList.filter(p=>p.runStatus==="warning" || p.runStatus==="alarm").length;
+        document.getElementById('portOffline').innerText = portList.filter(p=>p.runStatus==="offline").length;
+    }
+
+    // ========== 预警系统相关函数 ==========
+    function addWarning(level, type, position, desc){
+        const exist = warningList.some(w=> 
+            w.type === type && w.position === position && 
+            (Date.now() - w.timeStamp) < 300000
+        );
+        if(exist) return;
+
+        const now = new Date();
+        warningList.unshift({
+            id: ++warnIdCounter,
+            time: formatTime(now),
+            timeStamp: now.getTime(),
+            level: level,
+            type: type,
+            position: position,
+            desc: desc,
+            status: 'untreated'
+        });
+        renderWarningList();
+    }
+
+    function renderWarningList(){
+        const tbody = document.getElementById('warnTbody');
+        tbody.innerHTML = "";
+
+        let showList = warningList;
+        if(currentWarnFilter === 'untreated') showList = warningList.filter(w=>w.status==='untreated');
+        else if(currentWarnFilter === 'serious') showList = warningList.filter(w=>w.level==='serious');
+        else if(currentWarnFilter === 'heavy') showList = warningList.filter(w=>w.level==='heavy');
+        else if(currentWarnFilter === 'general') showList = warningList.filter(w=>w.level==='general');
+
+        showList.forEach(warn=>{
+            const tr = document.createElement('tr');
+            let levelClass, levelText;
+            switch(warn.level){
+                case 'serious': levelClass='level-serious'; levelText='严重'; break;
+                case 'heavy': levelClass='level-heavy'; levelText='较重'; break;
+                case 'general': levelClass='level-general'; levelText='一般'; break;
+            }
+            const statusClass = warn.status==='untreated' ? 'status-untreated' : 'status-treated';
+            const statusText = warn.status==='untreated' ? '未处理' : '已处理';
+            const btnDisabled = warn.status==='treated' ? 'disabled' : '';
+
+            tr.innerHTML = `
+                <td>${warn.time}</td>
+                <td><span class="level-tag ${levelClass}">${levelText}</span></td>
+                <td>${warn.type}</td>
+                <td>${warn.position}</td>
+                <td style="text-align:left;padding-left:12px">${warn.desc}</td>
+                <td class="${statusClass}">${statusText}</td>
+                <td><button class="btn-sm" ${btnDisabled} onclick="handleWarning(${warn.id})">处理</button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        document.getElementById('warnTotal').innerText = warningList.length;
+        document.getElementById('warnUntreated').innerText = warningList.filter(w=>w.status==='untreated').length;
+        document.getElementById('warnSerious').innerText = warningList.filter(w=>w.level==='serious').length;
+        document.getElementById('warnTreated').innerText = warningList.filter(w=>w.status==='treated').length;
+    }
+
+    function filterWarning(type){
+        currentWarnFilter = type;
+        document.querySelectorAll('#warnSystem .filter-bar button').forEach((btn,index)=>{
+            btn.className = index === ['all','untreated','serious','heavy','general'].indexOf(type) ? 'active' : '';
+        });
+        renderWarningList();
+    }
+
+    function handleWarning(id){
+        const warn = warningList.find(w=>w.id===id);
+        if(warn){
+            warn.status = 'treated';
+            renderWarningList();
+        }
+    }
+
+    // ========== 违规电器识别相关函数 ==========
+    function checkIllegalAppliance(){
+        dormList.forEach(dorm=>{
+            const deltaPower = dorm.power - dorm.lastPower;
+            // 功率突变>800W 且 总功率>1kW，触发识别
+            if(deltaPower > 0.8 && dorm.power > 1.0){
+                // 匹配电器类型
+                const match = APPLIANCE_RULES.find(r=> dorm.power >= r.min && dorm.power <= r.max);
+                const type = match ? match.name : "未知大功率电器";
+                const confidence = match ? match.confidence : 0.5;
+
+                // 防重复
+                const exist = illegalList.some(w=> 
+                    w.room === dorm.room && 
+                    w.status === 'suspected' &&
+                    (Date.now() - w.timeStamp) < 600000
+                );
+                if(!exist){
+                    const now = new Date();
+                    illegalList.unshift({
+                        id: ++illegalIdCounter,
+                        time: formatTime(now),
+                        timeStamp: now.getTime(),
+                        room: dorm.room,
+                        floor: dorm.floor,
+                        type: type,
+                        peakPower: dorm.power,
+                        duration: 0,
+                        confidence: confidence,
+                        status: 'suspected'
+                    });
+                    addWarning('heavy', '违规电器预警', `${dorm.room}宿舍`, `疑似使用${type}，峰值功率${dorm.power.toFixed(2)}kW`);
+                }
+            }
+
+            // 统计高功率持续时长
+            if(dorm.power >= 1.2){
+                dorm.highPowerTime++;
+                // 持续超过10分钟，升级置信度
+                if(dorm.highPowerTime === 10){
+                    const record = illegalList.find(w=> w.room === dorm.room && w.status === 'suspected');
+                    if(record){
+                        record.confidence = Math.min(0.98, record.confidence + 0.2);
+                    }
+                }
+            }else{
+                dorm.highPowerTime = Math.max(0, dorm.highPowerTime - 0.5);
+            }
+
+            // 更新持续时长
+            const record = illegalList.find(w=> w.room === dorm.room && w.status === 'suspected');
+            if(record && dorm.power >= 1.0){
+                record.duration = dorm.highPowerTime;
+                record.peakPower = Math.max(record.peakPower, dorm.power);
+            }
+
+            dorm.lastPower = dorm.power;
+        });
+        renderIllegalList();
+    }
+
+    function renderIllegalList(){
+        const tbody = document.getElementById('illegalTbody');
+        tbody.innerHTML = "";
+
+        illegalList.forEach(record=>{
+            const tr = document.createElement('tr');
+            const confPercent = Math.round(record.confidence * 100);
+            const confClass = record.confidence >= 0.8 ? 'confidence-high' : record.confidence >= 0.6 ? 'confidence-mid' : '';
+            
+            let statusText, statusClass;
+            switch(record.status){
+                case 'suspected': statusText='疑似'; statusClass='status-untreated'; break;
+                case 'verified': statusText='已核实'; statusClass='status-untreated'; break;
+                case 'treated': statusText='已断电'; statusClass='status-treated'; break;
+                case 'false': statusText='误报排除'; statusClass='status-treated'; break;
+            }
+
+            const min = Math.floor(record.duration);
+            const durationText = min > 0 ? `${min} 分钟` : '< 1 分钟';
+
+            tr.innerHTML = `
+                <td>${record.time}</td>
+                <td><b>${record.room}</b></td>
+                <td class="appliance-type">${record.type}</td>
+                <td>${record.peakPower.toFixed(2)}</td>
+                <td>${durationText}</td>
+                <td>
+                    <span class="confidence-bar ${confClass}"><span class="confidence-inner" style="width:${confPercent}%"></span></span>
+                    ${confPercent}%
+                </td>
+                <td class="${statusClass}">${statusText}</td>
+                <td>
+                    <button class="btn-sm danger" onclick="verifyIllegal(${record.id})" ${record.status!=='suspected'?'disabled':''}>核实</button>
+                    <button class="btn-sm" onclick="dismissIllegal(${record.id})" ${record.status!=='suspected'?'disabled':''}>排除</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        document.getElementById('illegalTotal').innerText = illegalList.length;
+        document.getElementById('illegalVerified').innerText = illegalList.filter(w=>w.status==='verified' || w.status==='treated').length;
+        document.getElementById('illegalTreated').innerText = illegalList.filter(w=>w.status==='treated').length;
+        document.getElementById('illegalFalse').innerText = illegalList.filter(w=>w.status==='false').length;
+    }
+
+    function verifyIllegal(id){
+        const record = illegalList.find(w=>w.id===id);
+        if(record){
+            record.status = 'verified';
+            addWarning('serious', '违规电器核实', `${record.room}宿舍`, `已核实使用${record.type}，请立即处理`);
+            renderIllegalList();
+        }
+    }
+
+    function dismissIllegal(id){
+        const record = illegalList.find(w=>w.id===id);
+        if(record){
+            record.status = 'false';
+            renderIllegalList();
+        }
+    }
+
+    // ========== 历史报表相关函数 ==========
+    function switchReport(time, type){
+        currentReportTime = time;
+        currentReportType = type;
+        
+        const btns = document.querySelectorAll('#historyReport .filter-bar button');
+        const timeIdx = ['today','week','month'].indexOf(time);
+        const typeIdx = ['power','warn','port','rank'].indexOf(type);
+        btns.forEach((btn,idx)=>{
+            if(idx < 3) btn.className = idx === timeIdx ? 'active' : '';
+            else if(idx < 7) btn.className = idx === 3 + typeIdx ? 'active' : '';
+        });
+
+        renderReport();
+    }
+
+    function renderReport(){
+        renderReportOverview();
+        renderReportTable();
+    }
+
+    function renderReportOverview(){
+        const box = document.getElementById('reportOverview');
+        let cards = [];
+
+        if(currentReportType === 'power'){
+            const data = getPowerReportData();
+            const totalEnergy = data.reduce((sum,item)=>sum + item.energy, 0);
+            const maxPower = Math.max(...data.map(item=>item.maxPower));
+            const avgPower = totalEnergy / (data.length * 24);
+            const warnCount = data.reduce((sum,item)=>sum + item.warnCount, 0);
+            
+            // 计算同比环比
+            const momRate = ((Math.random()-0.3)*10).toFixed(1); // 模拟环比
+            const yoyRate = ((Math.random()-0.5)*8).toFixed(1); // 模拟同比
+            const momClass = momRate > 0 ? 'rate-up' : momRate < 0 ? 'rate-down' : 'rate-normal';
+            const yoyClass = yoyRate > 0 ? 'rate-up' : yoyRate < 0 ? 'rate-down' : 'rate-normal';
+            const momArrow = momRate > 0 ? '↑' : momRate < 0 ? '↓' : '→';
+            const yoyArrow = yoyRate > 0 ? '↑' : yoyRate < 0 ? '↓' : '→';
+
+            cards = [
+                {num: totalEnergy.toFixed(1) + ' kWh', label: '累计用电量', sub: `环比 ${momArrow}${Math.abs(momRate)}%`, subClass: momClass},
+                {num: maxPower.toFixed(2) + ' kW', label: '峰值功率', sub: `同比 ${yoyArrow}${Math.abs(yoyRate)}%`, subClass: yoyClass},
+                {num: avgPower.toFixed(2) + ' kW', label: '平均功率', sub: '较定额 +2.3%', subClass: 'rate-up'},
+                {num: warnCount + ' 次', label: '预警次数', sub: '环比 ↓12.5%', subClass: 'rate-down'}
+            ];
+        }else if(currentReportType === 'warn'){
+            const data = getWarnReportData();
+            const total = data.length;
+            const serious = data.filter(w=>w.level==='严重').length;
+            const untreated = data.filter(w=>w.status==='未处理').length;
+            const rate = total > 0 ? ((1 - untreated/total)*100).toFixed(1) + '%' : '100%';
+            const momRate = ((Math.random()-0.4)*15).toFixed(1);
+            const momClass = momRate > 0 ? 'rate-up' : 'rate-down';
+            const momArrow = momRate > 0 ? '↑' : '↓';
+
+            cards = [
+                {num: total + ' 条', label: '预警总数', sub: `环比 ${momArrow}${Math.abs(momRate)}%`, subClass: momClass},
+                {num: serious + ' 条', label: '严重预警', sub: '占比 ' + (total>0?(serious/total*100).toFixed(1):0) + '%', subClass: 'rate-up'},
+                {num: untreated + ' 条', label: '待处理', sub: '超时 0 条', subClass: 'rate-normal'},
+                {num: rate, label: '处理完成率', sub: '提升 3.2%', subClass: 'rate-down'}
+            ];
+        }else if(currentReportType === 'port'){
+            const data = getPortReportData();
+            const onlineRate = ((data.online/data.total)*100).toFixed(1) + '%';
+            const failRate = ((Math.random()-0.3)*20).toFixed(1);
+            const failClass = failRate > 0 ? 'rate-up' : 'rate-down';
+            const failArrow = failRate > 0 ? '↑' : '↓';
+
+            cards = [
+                {num: data.total + ' 个', label: '监测端口数', sub: '无新增', subClass: 'rate-normal'},
+                {num: data.online + ' 个', label: '平均在线', sub: '在线率 ' + onlineRate, subClass: 'rate-normal'},
+                {num: data.fail + ' 次', label: '异常次数', sub: `环比 ${failArrow}${Math.abs(failRate)}%`, subClass: failClass},
+                {num: (99.5+Math.random()*0.4).toFixed(2) + '%', label: '可用率', sub: '达标', subClass: 'rate-down'}
+            ];
+        }else{
+            // 能耗排名概览
+            const rankData = getRankData('dorm');
+            const avgEnergy = rankData.reduce((sum,item)=>sum+item.energy,0)/rankData.length;
+            const belowAvg = rankData.filter(item=>item.energy < avgEnergy).length;
+
+            cards = [
+                {num: rankData.length + ' 间', label: '参与排名宿舍', sub: '全覆盖', subClass: 'rate-normal'},
+                {num: belowAvg + ' 间', label: '低于平均用电', sub: '占比 ' + (belowAvg/rankData.length*100).toFixed(0) + '%', subClass: 'rate-down'},
+                {num: '3 间', label: '节能标兵宿舍', sub: '前10%', subClass: 'rate-normal'},
+                {num: '2 间', label: '用电偏高预警', sub: '后10%', subClass: 'rate-up'}
+            ];
+        }
+
+        box.innerHTML = cards.map(card=>`
+            <div class="stat-card ${card.subClass==='rate-up'?'warning':card.subClass==='rate-down'?'success':''}">
+                <div class="num">${card.num}</div>
+                <div class="label">${card.label}</div>
+                <div style="font-size:12px;margin-top:4px" class="${card.subClass}">${card.sub}</div>
+            </div>
+        `).join('');
+    }
+
+    function renderReportTable(){
+        const thead = document.getElementById('reportTableHead');
+        const tbody = document.getElementById('reportTbody');
+
+        if(currentReportType === 'power'){
+            thead.innerHTML = `
+                <tr>
+                    <th>日期</th>
+                    <th>用电量 (kWh)</th>
+                    <th>环比变化</th>
+                    <th>峰值功率 (kW)</th>
+                    <th>平均功率 (kW)</th>
+                    <th>功率因数</th>
+                    <th>预警次数</th>
+                </tr>
+            `;
+            const data = getPowerReportData();
+            const totalEnergy = data.reduce((sum,item)=>sum + item.energy, 0);
+            const maxPower = Math.max(...data.map(item=>item.maxPower));
+            const totalWarn = data.reduce((sum,item)=>sum + item.warnCount, 0);
+            
+            tbody.innerHTML = data.map((item,idx)=>{
+                const momRate = idx>0 ? ((item.energy - data[idx-1].energy)/data[idx-1].energy*100).toFixed(1) : '-';
+                const momClass = momRate === '-' ? 'rate-normal' : momRate > 0 ? 'rate-up' : 'rate-down';
+                const momArrow = momRate === '-' ? '' : momRate > 0 ? '↑' : '↓';
+                return `
+                <tr>
+                    <td>${item.date}</td>
+                    <td>${item.energy.toFixed(2)}</td>
+                    <td class="${momClass}">${momRate === '-' ? '-' : momArrow + Math.abs(momRate) + '%'}</td>
+                    <td>${item.maxPower.toFixed(2)}</td>
+                    <td>${item.avgPower.toFixed(2)}</td>
+                    <td>${item.pf.toFixed(2)}</td>
+                    <td>${item.warnCount}</td>
+                </tr>
+                `;
+            }).join('') + `
+                <tr class="total-row">
+                    <td>合计/平均</td>
+                    <td>${totalEnergy.toFixed(2)}</td>
+                    <td class="rate-up">↑ 2.1%</td>
+                    <td>${maxPower.toFixed(2)}</td>
+                    <td>${(totalEnergy/data.length/24).toFixed(2)}</td>
+                    <td>0.92</td>
+                    <td>${totalWarn}</td>
+                </tr>
+            `;
+        }else if(currentReportType === 'warn'){
+            thead.innerHTML = `
+                <tr>
+                    <th>发生时间</th>
+                    <th>预警级别</th>
+                    <th>预警类型</th>
+                    <th>预警位置</th>
+                    <th>详情描述</th>
+                    <th>处理状态</th>
+                </tr>
+            `;
+            const data = getWarnReportData();
+            tbody.innerHTML = data.map(item=>{
+                let levelClass = item.level==='严重'?'level-serious':item.level==='较重'?'level-heavy':'level-general';
+                let statusClass = item.status==='未处理'?'status-untreated':'status-treated';
+                return `
+                <tr>
+                    <td>${item.time}</td>
+                    <td><span class="level-tag ${levelClass}">${item.level}</span></td>
+                    <td>${item.type}</td>
+                    <td>${item.position}</td>
+                    <td style="text-align:left;padding-left:12px">${item.desc}</td>
+                    <td class="${statusClass}">${item.status}</td>
+                </tr>
+                `;
+            }).join('');
+        }else if(currentReportType === 'port'){
+            thead.innerHTML = `
+                <tr>
+                    <th>日期</th>
+                    <th>端口编号</th>
+                    <th>端口名称</th>
+                    <th>平均功率 (kW)</th>
+                    <th>运行时长 (h)</th>
+                    <th>异常次数</th>
+                    <th>可用率</th>
+                </tr>
+            `;
+            const data = getPortReportData().list;
+            tbody.innerHTML = data.map(item=>`
+                <tr>
+                    <td>${item.date}</td>
+                    <td><b>${item.id}</b></td>
+                    <td>${item.name}</td>
+                    <td>${item.avgPower.toFixed(2)}</td>
+                    <td>${item.runTime}</td>
+                    <td>${item.failCount}</td>
+                    <td>${item.rate}%</td>
+                </tr>
+            `).join('');
+        }else{
+            // 能耗排名表
+            thead.innerHTML = `
+                <tr>
+                    <th>排名</th>
+                    <th>宿舍号</th>
+                    <th>所属楼层</th>
+                    <th>周期用电量 (kWh)</th>
+                    <th>与平均值对比</th>
+                    <th>等级标签</th>
+                </tr>
+            `;
+            const data = getRankData('dorm');
+            const avgEnergy = data.reduce((sum,item)=>sum+item.energy,0)/data.length;
+
+            tbody.innerHTML = data.map((item,idx)=>{
+                const rankNum = idx + 1;
+                const rankClass = rankNum <=3 ? `rank-${rankNum}` : 'rank-normal';
+                const diff = ((item.energy - avgEnergy)/avgEnergy*100).toFixed(1);
+                const diffClass = diff > 0 ? 'rate-up' : 'rate-down';
+                const diffArrow = diff > 0 ? '↑' : '↓';
+                
+                let tag = '';
+                if(rankNum <= 3) tag = '<span class="rank-tag tag-green">节能标兵</span>';
+                else if(rankNum > data.length - 2) tag = '<span class="rank-tag tag-red">用电偏高</span>';
+
+                return `
+                <tr>
+                    <td><span class="rank-num ${rankClass}">${rankNum}</span></td>
+                    <td><b>${item.room}</b></td>
+                    <td>${item.floor}楼</td>
+                    <td>${item.energy.toFixed(2)}</td>
+                    <td class="${diffClass}">${diffArrow} ${Math.abs(diff)}%</td>
+                    <td>${tag}</td>
+                </tr>
+                `;
+            }).join('');
+        }
+    }
+
+    // 报表数据生成
+    function getPowerReportData(){
+        const days = currentReportTime === 'today' ? 1 : currentReportTime === 'week' ? 7 : 30;
+        const data = [];
+        const now = new Date();
+        for(let i=days-1; i>=0; i--){
+            const date = new Date(now.getTime() - i*86400000);
+            const dateStr = `${date.getMonth()+1}/${date.getDate()}`;
+            const energy = 28 + Math.random()*6;
+            const maxPower = 30 + Math.random()*5;
+            data.push({
+                date: i===0 ? '今日' : dateStr,
+                energy: energy,
+                maxPower: maxPower,
+                avgPower: energy/24,
+                pf: 0.9 + Math.random()*0.05,
+                warnCount: Math.floor(Math.random()*3)
+            });
+        }
+        return data;
+    }
+
+    function getWarnReportData(){
+        const days = currentReportTime === 'today' ? 1 : currentReportTime === 'week' ? 7 : 30;
+        const types = ['过载预警','过温预警','过压预警','欠压预警','违规电器'];
+        const positions = ['主进线端口','3楼配电端口','2楼配电端口','302宿舍','5楼宿舍区'];
+        const levels = ['一般','较重','严重'];
+        const data = [];
+        const count = days * 3;
+        for(let i=0; i<count; i++){
+            const date = new Date(Date.now() - i*Math.floor(86400000/days*2));
+            data.push({
+                time: `${date.getMonth()+1}/${date.getDate()} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`,
+                level: levels[Math.floor(Math.random()*3)],
+                type: types[Math.floor(Math.random()*5)],
+                position: positions[Math.floor(Math.random()*5)],
+                desc: '监测值超过阈值，已自动记录',
+                status: Math.random()>0.3 ? '已处理' : '未处理'
+            });
+        }
+        return data;
+    }
+
+    function getPortReportData(){
+        const days = currentReportTime === 'today' ? 1 : currentReportTime === 'week' ? 7 : 30;
+        const list = [];
+        portList.forEach(port=>{
+            if(port.runStatus === 'offline' && days > 1) return;
+            list.push({
+                date: currentReportTime === 'today' ? '今日' : `近${days}天`,
+                id: port.id,
+                name: port.name,
+                avgPower: port.power * (0.9 + Math.random()*0.2),
+                runTime: port.runStatus==='offline' ? 0 : Math.floor(days*24*(0.95+Math.random()*0.05)),
+                failCount: Math.floor(Math.random()*days*2),
+                rate: port.runStatus==='offline' ? 0 : (95+Math.random()*5).toFixed(1)
+            });
+        });
+        return {
+            total: portList.length,
+            online: portList.filter(p=>p.runStatus!=='offline').length,
+            fail: Math.floor(Math.random()*10),
+            list: list
+        };
+    }
+
+    function getRankData(type){
+        if(type === 'dorm'){
+            const list = dormList.map(d=>({
+                room: d.room,
+                floor: d.floor,
+                energy: d.dayEnergy * (currentReportTime==='week'?7 : currentReportTime==='month'?30 : 1)
+            }));
+            return list.sort((a,b)=>a.energy - b.energy);
+        }else{
+            const list = floorList.map((f,idx)=>({
+                floor: idx+1,
+                name: f.name,
+                energy: f.energy
+            }));
+            return list.sort((a,b)=>a.energy - b.energy);
+        }
+    }
+
+    function exportReport(){
+        const typeMap = {power:'用电', warn:'预警', port:'端口', rank:'能耗排名'};
+        const timeMap = {today:'今日', week:'近7天', month:'近30天'};
+        alert(`已生成${timeMap[currentReportTime]}${typeMap[currentReportType]}报表，支持导出Excel/PDF格式。`);
+    }
+
+    // ========== 工具函数 ==========
+    function filterDorm(floor){
+        currentFloorFilter = floor;
+        document.querySelectorAll('#dormDetail .filter-bar button').forEach((btn,index)=>{
+            btn.className = index === floor ? 'active' : '';
+        });
+        renderDormList();
+    }
+
+    function formatTime(date){
+        const hh = String(date.getHours()).padStart(2,'0');
+        const mm = String(date.getMinutes()).padStart(2,'0');
+        const ss = String(date.getSeconds()).padStart(2,'0');
+        return `${hh}:${mm}:${ss}`;
+    }
+
+    // ========== 更新实时数据 ==========
+    function updateData(){
+        const now = new Date();
+        const timeMinuteStr = formatTime(now).slice(0,5);
+        const fullTimeStr = formatTime(now);
+
+        document.getElementById('sysTime').innerText = fullTimeStr;
+        document.getElementById('updateTime').innerText = timeMinuteStr;
+
+        // 宿舍功率波动
+        dormList.forEach(dorm=>{
+            dorm.power += (Math.random()-0.5)*0.08;
+            dorm.power = Math.max(0.3, dorm.power);
+            dorm.dayEnergy += dorm.power / 60;
+            dorm.monthEnergy += dorm.power / 60;
+        });
+
+        // 楼层功率汇总
+        floorList.forEach((floor, index)=>{
+            const floorNum = index + 1;
+            const floorDorms = dormList.filter(d => d.floor === floorNum);
+            floor.power = floorDorms.reduce((sum, d)=>sum + d.power, 0) + 0.15;
+            floor.energy = floorDorms.reduce((sum, d)=>sum + d.monthEnergy, 0);
+        });
+
+        const totalPower = floorList.reduce((sum,f)=>sum + f.power, 0);
+        const totalVoltage = 218 + Math.random()*4;
+        const totalCurrent = totalPower*1000 / totalVoltage / 0.92;
+
+        // 更新总参数
+        document.getElementById('totalPower').innerText = totalPower.toFixed(2)+" kW";
+        document.getElementById('totalVoltage').innerText = totalVoltage.toFixed(1)+" V";
+        document.getElementById('totalCurrent').innerText = totalCurrent.toFixed(1)+" A";
+        document.getElementById('totalEnergy').innerText = floorList.reduce((sum,f)=>sum+f.energy,0).toFixed(1)+" kWh";
+        document.getElementById('powerFactor').innerText = (0.90 + Math.random()*0.04).toFixed(2);
+        document.getElementById('freq').innerText = (49.98 + Math.random()*0.08).toFixed(2)+" Hz";
+
+        // 进线状态
+        const lineStatus = document.getElementById('lineStatus');
+        if(totalPower > 35){
+            lineStatus.innerText = "过载告警";
+            lineStatus.style.color = "#dc3545";
+            addWarning('serious', '过载预警', '主进线端口', `总功率${totalPower.toFixed(2)}kW，超过安全阈值35kW，请立即减载`);
+        }else if(totalPower > 33){
+            lineStatus.innerText = "过载预警";
+            lineStatus.style.color = "#ffc107";
+            addWarning('heavy', '过载预警', '主进线端口', `总功率${totalPower.toFixed(2)}kW，接近阈值35kW，请关注负载变化`);
+        }else{
+            lineStatus.innerText = "正常";
+            lineStatus.style.color = "#28a745";
+        }
+
+        // 电压异常预警
+        if(totalVoltage > 223.5){
+            addWarning('heavy', '过压预警', '主进线端口', `进线电压${totalVoltage.toFixed(1)}V，超过正常范围上限223V`);
+        }else if(totalVoltage < 218.5){
+            addWarning('general', '欠压预警', '主进线端口', `进线电压${totalVoltage.toFixed(1)}V，低于正常范围下限219V`);
+        }
+
+        // 更新端口数据
+        const mainPort = portList.find(p=>p.id==="COM01");
+        mainPort.voltage = totalVoltage;
+        mainPort.current = totalCurrent;
+        mainPort.power = totalPower;
+        mainPort.temp = 30 + totalPower/2;
+        mainPort.update = timeMinuteStr;
+        mainPort.runStatus = totalPower>35 ? "alarm" : totalPower>33 ? "warning" : "normal";
+
+        for(let i=1; i<=6; i++){
+            const port = portList.find(p=>p.id===`COM1${i}`);
+            const floor = floorList[i-1];
+            port.power = floor.power;
+            port.voltage = 219 + Math.random()*3;
+            port.current = floor.power*1000 / port.voltage / 0.9;
+            port.temp = 26 + floor.power*2;
+            port.update = timeMinuteStr;
+
+            if(floor.power >= 6.0 || port.temp >= 42){
+                port.runStatus = "alarm";
+                port.commStatus = "过载告警";
+                addWarning('serious', '过载告警', `${i}楼配电端口`, `功率${floor.power.toFixed(2)}kW，温度${port.temp.toFixed(1)}℃，超过安全阈值`);
+            }else if(floor.power >= 5.5 || port.temp >= 38){
+                port.runStatus = "warning";
+                port.commStatus = "负载预警";
+                addWarning('heavy', '过温预警', `${i}楼配电端口`, `端口温度${port.temp.toFixed(1)}℃，接近告警阈值`);
+            }else{
+                port.runStatus = "normal";
+                port.commStatus = "正常";
+            }
+        }
+
+        // 公共端口
+        portList.find(p=>p.id==="COM21").power = 1.8 + Math.random()*0.4;
+        portList.find(p=>p.id==="COM22").power = 1.0 + Math.random()*0.5;
+
+        // 违规电器检测
+        checkIllegalAppliance();
+
+        // 折线图更新
+        timeLabels.push(timeMinuteStr);
+        powerData.push(totalPower.toFixed(2));
+        if(timeLabels.length>maxDataCount){
+            timeLabels.shift();
+            powerData.shift();
+        }
+        lineChart.update();
+        renderFloor();
+        renderDormList();
+        renderPortTable();
+    }
+
+    // ========== 初始化 ==========
+    function initHistoryData(){
+        const now = new Date();
+        for(let i = maxDataCount; i > 0; i--){
+            const time = new Date(now.getTime() - i * 60000);
+            timeLabels.push(formatTime(time).slice(0,5));
+            powerData.push((30 + Math.random()*2).toFixed(2));
+        }
+    }
+
+    window.onload = function(){
+        initHistoryData();
+        initLineChart();
+        initPieChart();
+        renderFloor();
+        renderDormList();
+        renderPortTable();
+        renderWarningList();
+        renderIllegalList();
+        renderReport();
+        
+        // 初始模拟数据
+        addWarning('heavy', '过温预警', '3楼配电端口', '端口温度38.2℃，接近告警阈值40℃');
+        addWarning('general', '负载预警', '2楼宿舍区', '2楼整体负载偏高，建议关注');
+        illegalList.unshift({
+            id: ++illegalIdCounter,
+            time: '14:23:05',
+            timeStamp: Date.now() - 180000,
+            room: '302',
+            floor: 3,
+            type: '热得快/电暖器',
+            peakPower: 1.62,
+            duration: 8,
+            confidence: 0.85,
+            status: 'suspected'
+        });
+        
+        updateData();
+        setInterval(updateData, 60000);
+    }
+</script>
+</body>
+</html>
+<!-- （注：内容由AI生成） -->
