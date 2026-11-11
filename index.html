@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>广技师白云校区A区13号宿舍楼电力监控系统</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+<script>
+// CDN加载失败兜底提示
+window.addEventListener('load', function(){
+    if(typeof Chart === 'undefined'){
+        document.body.innerHTML = '<div style="padding:40px;color:#ff5c5c;font-size:18px">图表库加载失败，请检查网络后刷新页面</div>';
+    }
+});
+</script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:"Microsoft Yahei",sans-serif}
+body{background:#0f1722;color:#e6edf7}
+.top-nav{height:50px;background:#162233;display:flex;align-items:center;padding:0 20px;border-bottom:1px solid #273b52;position:sticky;top:0;z-index:99}
+.top-nav .title{font-size:18px;font-weight:bold;color:#49b8ff;margin-right:40px}
+.top-nav a{color:#b8c8dd;text-decoration:none;padding:0 16px;height:50px;line-height:50px;display:inline-block}
+.top-nav a.active{background:#1f3550;color:#49b8ff;border-bottom:2px solid #49b8ff}
+.container{padding:20px;max-width:1600px;margin:0 auto}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}
+.card{background:#162233;border:1px solid #273b52;border-radius:8px;padding:16px}
+.card h3{color:#73c0ff;margin-bottom:14px;font-size:16px;border-bottom:1px solid #273b52;padding-bottom:8px}
+.full{grid-column:1/-1}
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.stat-box{background:#1b2c42;padding:14px;border-radius:6px;text-align:center;border-left:4px solid #49b8ff}
+.stat-box .num{font-size:22px;font-weight:bold;color:#fff;font-family:monospace}
+.stat-box .label{font-size:13px;color:#8cb8e8;margin-top:4px}
+.chart-box{height:300px;width:100%}
+.chart-box-sm{height:260px;width:100%}
+table{width:100%;border-collapse:collapse;text-align:center;font-size:14px}
+th,td{border:1px solid #273b52;padding:8px;color:#c2d1e6}
+th{background:#1b2c42;color:#8cb8e8}
+.floor-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.floor-card{background:#1b2c42;padding:12px;border-radius:6px;border-left:4px solid #28a745}
+.btn{padding:5px 12px;border:none;border-radius:4px;cursor:pointer;background:#1f3550;color:#49b8ff;border:1px solid #49b8ff}
+.status-bar{margin-top:20px;padding:10px;background:#162233;border:1px solid #273b52;border-radius:6px}
+.status-bar .time{color:#49b8ff;float:right;font-family:monospace}
+.normal{color:#28a745;font-weight:bold}
+.warn{color:#ffc107;font-weight:bold}
+.alarm{color:#dc3545;font-weight:bold}
+</style>
+</head>
+<body>
+<div class="top-nav">
+    <div class="title">广技师白云校区A区13号宿舍楼｜电力监控系统</div>
+    <a href="#" class="active">总监控主页</a>
+    <a href="#dorm">宿舍用电</a>
+    <a href="#port">端口监测</a>
+    <a href="#warn">预警系统</a>
+    <a href="#report">历史报表</a>
+</div>
+
+<div class="container">
+    <div class="card full">
+        <h3>总实时功率曲线（秒级采样，最近2分钟）</h3>
+        <div class="chart-box"><canvas id="rtChart"></canvas></div>
+    </div>
+
+    <div class="card full">
+        <h3>日用电量趋势（最近30天）</h3>
+        <div class="chart-box"><canvas id="dailyChart"></canvas></div>
+    </div>
+
+    <div class="grid-2">
+        <div class="card">
+            <h3>各楼层用电监测</h3>
+            <div class="floor-grid" id="floorBox"></div>
+        </div>
+        <div class="card">
+            <h3>耗电结构占比</h3>
+            <div class="chart-box-sm"><canvas id="pieChart"></canvas></div>
+        </div>
+    </div>
+
+    <div class="card full" id="dorm">
+        <h3>宿舍用电明细</h3>
+        <table>
+            <thead><tr><th>宿舍号</th><th>楼层</th><th>实时功率(kW)</th><th>今日累计(kWh)</th><th>状态</th></tr></thead>
+            <tbody id="dormTable"></tbody>
+        </table>
+    </div>
+
+    <div class="card full" id="port">
+        <h3>实时端口监测</h3>
+        <table>
+            <thead><tr><th>端口编号</th><th>名称</th><th>电压(V)</th><th>电流(A)</th><th>功率(kW)</th><th>温度(℃)</th><th>状态</th></tr></thead>
+            <tbody id="portTable"></tbody>
+        </table>
+    </div>
+
+    <div class="card full" id="warn">
+        <h3>实时预警记录</h3>
+        <table>
+            <thead><tr><th>时间</th><th>级别</th><th>类型</th><th>位置</th><th>状态</th></tr></thead>
+            <tbody id="warnTable"></tbody>
+        </table>
+    </div>
+
+    <div class="card full" id="report">
+        <h3>能耗统计概览（含同比环比）</h3>
+        <div class="stat-row">
+            <div class="stat-box"><div class="num" id="sTotal">-</div><div class="label">今日总用电(kWh)</div></div>
+            <div class="stat-box"><div class="num" id="sMom">-</div><div class="label">环比昨日</div></div>
+            <div class="stat-box"><div class="num" id="sYoy">-</div><div class="label">同比上周</div></div>
+            <div class="stat-box"><div class="num" id="sPeak">-</div><div class="label">今日峰值(kW)</div></div>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        系统状态：正常运行｜采样周期：1秒
+        <span class="time" id="sysTime">--</span>
+    </div>
+</div>
+
+<script>
+// 全局变量全部初始化
+let rtChart = null, dailyChart = null, pieChart = null;
+let rtLabels = [], rtData = [];
+let dailyLabels = [], dailyData = [];
+let warnList = [];
+const safe = (v, def=0) => (isNaN(v)||!isFinite(v)||v===null||v===undefined) ? def : Number(v);
+
+window.onload = function(){
+    try{
+        // 初始化秒级曲线
+        for(let i=120;i>0;i--){
+            const t = new Date(Date.now()-i*1000);
+            rtLabels.push(`${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}:${String(t.getSeconds()).padStart(2,'0')}`);
+            rtData.push(safe(31+Math.random(),31).toFixed(2));
+        }
+        // 初始化日曲线
+        for(let i=30;i>0;i--){
+            const t = new Date(Date.now()-i*86400000);
+            dailyLabels.push(`${t.getMonth()+1}/${t.getDate()}`);
+            dailyData.push(safe(680+Math.random()*60,700).toFixed(1));
+        }
+        initCharts();
+        refreshAll();
+        setInterval(refreshAll, 1000);
+    }catch(e){
+        document.body.innerHTML += '<div style="padding:20px;color:#ff5c5c">页面初始化出错: '+e.message+'</div>';
+    }
+}
+
+function initCharts(){
+    if(typeof Chart === 'undefined') return;
+    // 秒级曲线
+    rtChart = new Chart(document.getElementById('rtChart').getContext('2d'), {
+        type:'line',
+        data:{labels:rtLabels, datasets:[{label:'实时功率kW', data:rtData, borderColor:'#49b8ff', backgroundColor:'rgba(73,184,255,0.1)', fill:true, tension:0.1, pointRadius:0}]},
+        options:{responsive:true, maintainAspectRatio:false, animation:false,
+            scales:{x:{ticks:{color:'#b8c8dd',maxTicksLimit:10}}, y:{min:28, max:36, ticks:{color:'#b8c8dd'}}}
+        }
+    });
+    // 日曲线
+    dailyChart = new Chart(document.getElementById('dailyChart').getContext('2d'), {
+        type:'line',
+        data:{labels:dailyLabels, datasets:[{label:'日用电量kWh', data:dailyData, borderColor:'#36cc96', backgroundColor:'rgba(54,204,150,0.1)', fill:true, tension:0.3, pointRadius:3}]},
+        options:{responsive:true, maintainAspectRatio:false, animation:false,
+            scales:{x:{ticks:{color:'#b8c8dd',maxTicksLimit:15}}, y:{min:600, max:800, ticks:{color:'#b8c8dd'}}}
+        }
+    });
+    // 饼图
+    pieChart = new Chart(document.getElementById('pieChart').getContext('2d'), {
+        type:'pie',
+        data:{labels:['照明','插座','空调','公共','其他'], datasets:[{data:[22,35,30,10,3], backgroundColor:['#49b8ff','#36cc96','#ffc107','#ff784e','#9b7bff'], borderColor:'#0f1722', borderWidth:2}]},
+        options:{responsive:true, maintainAspectRatio:false}
+    });
+}
+
+function refreshAll(){
+    const now = new Date();
+    const t = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+    document.getElementById('sysTime').innerText = t;
+
+    // 楼层数据
+    const floorData = [
+        {name:'1楼',power:safe(4+Math.random()*0.2,4),energy:3120},
+        {name:'2楼',power:safe(5+Math.random()*0.2,5),energy:3462},
+        {name:'3楼',power:safe(6+Math.random()*0.2,6),energy:3810},
+        {name:'4楼',power:safe(5.7+Math.random()*0.2,5.7),energy:3544},
+        {name:'5楼',power:safe(4.6+Math.random()*0.2,4.6),energy:3201},
+        {name:'6楼',power:safe(5.1+Math.random()*0.2,5.1),energy:3485}
+    ];
+    document.getElementById('floorBox').innerHTML = floorData.map(f=>{
+        const c = f.power>5.8?'alarm':f.power>5.4?'warn':'normal';
+        return `<div class="floor-card" style="border-left-color:${c==='alarm'?'#dc3545':c==='warn'?'#ffc107':'#28a745'}">
+            <b style="color:#fff">${f.name}</b>
+            <p style="font-size:13px;color:#b8c8dd;margin-top:6px">功率: <b>${f.power.toFixed(2)} kW</b><br>累计: ${f.energy.toFixed(0)} kWh</p>
+        </div>`
+    }).join('');
+
+    // 宿舍表格
+    let dormHtml = '';
+    for(let i=101;i<=124;i++){
+        const p = safe(1+Math.random()*0.7,1.2);
+        const c = p>1.5?'alarm':p>1.2?'warn':'normal';
+        dormHtml += `<tr><td><b>${i}</b></td><td>${Math.floor(i/100)}楼</td><td>${p.toFixed(3)}</td><td>${(2+Math.random()*2).toFixed(2)}</td><td class="${c}">${c==='alarm'?'过载':c==='warn'?'预警':'正常'}</td></tr>`;
+    }
+    document.getElementById('dormTable').innerHTML = dormHtml;
+
+    // 端口表格
+    const portData = [
+        {id:'COM01',name:'主进线',v:220,i:142,p:31,t:32,s:'normal'},
+        {id:'COM11',name:'1楼配电',v:221,i:19,p:4.2,t:28,s:'normal'},
+        {id:'COM12',name:'2楼配电',v:220,i:23,p:5.1,t:29,s:'normal'},
+        {id:'COM13',name:'3楼配电',v:219,i:28,p:6.3,t:38,s:'warn'},
+        {id:'COM14',name:'4楼配电',v:220,i:26,p:5.8,t:30,s:'normal'},
+        {id:'COM15',name:'5楼配电',v:221,i:21,p:4.7,t:28,s:'normal'},
+        {id:'COM16',name:'6楼配电',v:220,i:23,p:5.2,t:29,s:'normal'}
+    ];
+    document.getElementById('portTable').innerHTML = portData.map(p=>{
+        return `<tr><td><b>${p.id}</b></td><td>${p.name}</td><td>${(p.v+Math.random()*2).toFixed(1)}</td><td>${(p.i+Math.random()).toFixed(1)}</td><td>${(p.p+Math.random()*0.2).toFixed(2)}</td><td>${(p.t+Math.random()*1).toFixed(1)}</td><td class="${p.s}">${p.s==='warn'?'预警':'运行中'}</td></tr>`
+    }).join('');
+
+    // 预警表格
+    if(Math.random()<0.05){
+        warnList.unshift({time:t,level:'较重',type:'过载预警',pos:'3楼配电',status:'未处理'});
+    }
+    document.getElementById('warnTable').innerHTML = warnList.slice(0,8).map(w=>`<tr><td>${w.time}</td><td class="${w.level==='严重'?'alarm':w.level==='较重'?'warn':'normal'}">${w.level}</td><td>${w.type}</td><td>${w.pos}</td><td>${w.status}</td></tr>`).join('') || '<tr><td colspan="5" class="normal">当前无预警</td></tr>';
+
+    // 统计卡片
+    const todayTotal = (720 + Math.random()*20).toFixed(1);
+    document.getElementById('sTotal').innerText = todayTotal;
+    document.getElementById('sMom').innerText = '↑ 2.1%';
+    document.getElementById('sMom').className = 'num alarm';
+    document.getElementById('sYoy').innerText = '↓ 1.3%';
+    document.getElementById('sYoy').className = 'num normal';
+    document.getElementById('sPeak').innerText = (33+Math.random()*1).toFixed(2)+' kW';
+
+    // 实时曲线更新
+    const totalP = safe(31+Math.random()*1,31);
+    rtLabels.push(t);
+    rtData.push(totalP.toFixed(2));
+    if(rtLabels.length>120){rtLabels.shift();rtData.shift();}
+    if(rtChart) rtChart.update('none');
+}
+</script>
+</body>
+</html>
+<!-- （注：内容由AI生成） -->
